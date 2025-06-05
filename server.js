@@ -6,9 +6,22 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 4000;
 
-app.use(cors());
+app.use(cors({
+    origin: true,
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar']
+}));
+
+// Request logging middleware
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    console.log('Request body:', req.body);
+    next();
+});
 app.use(express.json());
 
 // In-memory storage for ingestion requests and their status
@@ -121,8 +134,23 @@ function updateIngestionStatus(ingestionId) {
     }
 }
 
+// Root route handler
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Welcome to the Data Ingestion API',
+        endpoints: {
+            ingest: '/ingest (POST)'
+        }
+    });
+});
+
 // POST /ingest endpoint
 app.post('/ingest', (req, res) => {
+    console.log('Processing ingest request:', req.body);
+    
+    // Log request headers
+    console.log('Request headers:', req.headers);
+    
     try {
         const { ids, priority } = req.body;
 
@@ -166,31 +194,49 @@ app.post('/ingest', (req, res) => {
             processNextBatch();
         }
 
-        res.json({ ingestion_id: ingestionId });
+        res.status(200).json({
+            ingestion_id: ingestionId,
+            message: 'Ingestion request created successfully'
+        });
     } catch (error) {
         console.error('Error in /ingest:', error);
-        res.status(400).json({ error: error.message });
+        res.status(400).json({
+            error: error.message,
+            message: 'Failed to create ingestion request'
+        });
     }
 });
 
 // GET /status/:ingestionId endpoint
 app.get('/status/:ingestionId', (req, res) => {
+    console.log('Processing status request for:', req.params.ingestionId);
+    
+    // Log request headers
+    console.log('Status request headers:', req.headers);
+    
     try {
         const { ingestionId } = req.params;
         const ingestion = ingestionStore.get(ingestionId);
 
         if (!ingestion) {
-            return res.status(404).json({ error: 'Ingestion request not found' });
+            return res.status(404).json({
+                error: 'Ingestion request not found',
+                message: 'No ingestion request found with the provided ID'
+            });
         }
 
-        res.json({
+        res.status(200).json({
             ingestion_id: ingestion.ingestion_id,
             status: ingestion.status,
-            batches: ingestion.batches
+            batches: ingestion.batches,
+            message: 'Ingestion status retrieved successfully'
         });
     } catch (error) {
         console.error('Error in /status:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({
+            error: error.message,
+            message: 'Failed to retrieve ingestion status'
+        });
     }
 });
 
